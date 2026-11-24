@@ -185,7 +185,7 @@ def jpeg(w, h, marker=0xc0, bits=8, parts=3, before=b'', tag=b''):
 
 def jpeg_size(fw, data):
     block = C.create_string_buffer(data, len(data) or 1)
-    return fw.fn('system__jpeg_size', C.c_uint, C.c_void_p, C.c_uint)(block, len(data))
+    return fw.fn('jpeg_size', C.c_uint, C.c_void_p, C.c_uint)(block, len(data))  # shared with bootanim.c
 
 
 @pytest.mark.parametrize('w, h', [(320, 375), (375, 320), (1, 1), (0xffff, 0xffff)])

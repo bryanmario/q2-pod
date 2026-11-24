@@ -39,6 +39,7 @@
 { "app_songs", CTX_DYNAMIC, 0 },       /* runtime window (patch/library_lists.c) */
 { "addon_page", CTX_DYNAMIC, 0 },      /* runtime window (patch/addon.c) */
 { "battery_page", CTX_DYNAMIC, 0 },    /* runtime window (patch/battery.c) */
+{ "startup_page", CTX_DYNAMIC, 0 },    /* runtime window (patch/bootanim.c) */
 { "album_page", CTX_LOCAL, 0 },
 { "albuminfo_page", CTX_LOCAL, 0 },
 { "allmusic_page", CTX_LOCAL, 0 },

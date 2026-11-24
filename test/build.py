@@ -38,12 +38,12 @@ print('Dev build tag checks passed.')
 def boot_check():
     """S90play's dual boot (build.py BOOT_HOOK) under the host sh, with stand-in programs."""
     import os, subprocess, tempfile, pathlib, shutil
-    from build import BOOT_HOOK, WHEEL_LOG_HOOK, LOG_HOOK, ROCKBOX_FLAG, WIFI_OFF
+    from build import BOOT_HOOK, WHEEL_LOG_HOOK, LOG_HOOK, ROCKBOX_FLAG, WIFI_OFF, ANIM_FLAG
     with tempfile.TemporaryDirectory(prefix='q2-boot-') as tmp:
         r = pathlib.Path(tmp)
         def host(hook):
             script = hook.decode().replace(' &\n', '\n')
-            for old in ('/mnt/', '/tmp/mmc_add', ROCKBOX_FLAG, '/usr/bin/q2boot', '/release/bin/demo', '/proc/mounts', '/tmp/q2-demo.log',
+            for old in ('/mnt/', '/tmp/mmc_add', ROCKBOX_FLAG, ANIM_FLAG, '/usr/bin/q2boot', '/release/bin/demo', '/proc/mounts', '/tmp/q2-demo.log',
                         '/tmp/q2-scan-file', '/tmp/q2-scan.log', '/tmp/q2-art-file', '/tmp/q2-art.log', '/tmp/rtk_init_success', '/tmp/bt_startup'):
                 script = script.replace(old, f'{r}{old}')
             script = script.replace('usleep 200000\n', ':\n').replace('usleep 500000', ':')
@@ -292,12 +292,31 @@ boot_check()
 def logo_check():
     """S11logo_display_shell's splash choice (build.py LOGO_HOOK) under the host sh."""
     import subprocess, tempfile, pathlib
-    from build import LOGO_HOOK, LOGO, LOGO_LIGHT, TIMEZONES
+    from build import LOGO_HOOK, LOGO, LOGO_LIGHT, TIMEZONES, ANIM, ANIM_FLAG, STARTUP_IMAGE
     with tempfile.TemporaryDirectory(prefix='q2-logo-') as tmp:
         tmp = pathlib.Path(tmp)
         user, config, dark, light = tmp/'boot-logo.jpg', tmp/'config.ini', tmp/'logo.jpg', tmp/'logo-light.jpg'
-        script = (LOGO_HOOK[1].decode().replace('/mnt/data/boot-logo.jpg', str(user)).replace('/mnt/data/config.ini', str(config))
-                  .replace('/'+LOGO_LIGHT, str(light)).replace('/'+LOGO, str(dark)).replace('display_logo', 'echo'))
+        anim, flag, image = tmp/'startup.gif', tmp/'q2-bootanim', tmp/'startup.jpg'
+        script = (LOGO_HOOK[1].decode().replace(STARTUP_IMAGE, str(image))
+                  .replace('/mnt/data/boot-logo.jpg', str(user)).replace('/mnt/data/config.ini', str(config))
+                  .replace('/'+LOGO_LIGHT, str(light)).replace('/'+LOGO, str(dark)).replace('display_logo', 'echo')
+                  .replace(ANIM, str(anim)).replace(ANIM_FLAG, str(flag)).replace('/usr/bin/ffmpeg', 'ffmpeg'))
+        # The boot animation (ANIM_HOOK, LOGO_HOOK): played instead of the splash; one ffmpeg can't play shows the splash.
+        # Either way the flag S90play waits on is gone at the end.
+        def played(ok):
+            fake = f'ffmpeg() {{ echo anim; return {0 if ok else 1}; }}; '
+            flag.write_bytes(b'')
+            out = subprocess.run(['sh', '-c', fake + script], check=True, capture_output=True, text=True).stdout.split()
+            return out, flag.exists()
+        assert played(True) == ([str(dark)], False)  # no GIF saved: the splash, and ffmpeg is never run
+        anim.write_bytes(b'GIF89a')
+        assert played(True) == (['anim'], False)  # the GIF plays and the splash isn't drawn
+        assert played(False) == (['anim', str(dark)], False)  # a GIF ffmpeg can't play: the splash
+        # S90play stopped it (BOOT_HOOK: the flag goes, then ffmpeg is killed): no splash over the player
+        fake = f'ffmpeg() {{ echo anim; sleep 0.3; rm -f {flag}; return 137; }}; '
+        flag.write_bytes(b'')
+        assert subprocess.run(['sh', '-c', fake + script], check=True, capture_output=True, text=True).stdout.split() == ['anim']
+        anim.unlink()
         def shown(): return subprocess.run(['sh', '-c', script], check=True, capture_output=True, text=True).stdout.strip()
         assert shown() == str(dark)  # no card logo, no config: the built-in splash
         config.write_text('[IPOD]\nLIGHT=1\n')
@@ -309,6 +328,9 @@ def logo_check():
         user.write_bytes(b'')
         config.write_text('[IPOD]\nLIGHT=1\n')
         assert shown() == str(user)  # the card's logo wins in either mode
+        image.write_bytes(b'')
+        assert shown() == str(image)  # Settings' Startup Screen image wins over the card's logo
+        image.unlink()
         user.unlink()
         config.write_text('[IPOD]\nLIGHT=2\n')  # Auto: light from 07:00 to 18:59 by the clock
         def at(hour): return subprocess.run(['sh', '-c', script.replace('$(TZ=$z date +%H)', hour)], check=True, capture_output=True, text=True).stdout.strip()
@@ -323,7 +345,7 @@ def logo_check():
             config.write_text(text)
             fake = f'''date() {{ [ "$TZ" = '{TIMEZONES[22][1]}' ] && echo 12 || echo 22; }}; '''
             assert subprocess.run(['sh', '-c', fake + script], check=True, capture_output=True, text=True).stdout.strip() == str(light)
-    print('Boot logo: the saved card logo, else the light splash under Light Mode, else the built-in one, passed.')
+    print('Boot logo: the Startup Screen animation if one plays, else its image, else the saved card logo, else the light splash under Light Mode, else the built-in one, passed.')
 logo_check()
 
 def mount_check():
@@ -364,7 +386,7 @@ mount_check()
 
 def validate_assets(directory):
     import functools, json, re, struct, subprocess
-    from build import sha, run, fileoff, symbols, BLUEALSA, AAC_44K1, GRADIENT_LEAF, WM_PAINT_LEAF, QUEUE_LEAF, HELPER, HELPER_LIKE, BOOT, BOOT_HOOK, REMOTE, REMOTE_HOOK, LOG_HOOK, WHEEL_LOG_HOOK, S90PLAY, S11LOGO, LOGO_HOOK, LOGO_LIGHT, BLUEALSA2, BT_KEEPALIVE, BLUETOOTHD, BT_GRACE, RTC_WRITE, WIFI_LPS, HOOKS, LOCK_CLOCK_12H, WATCHDOG, WATCHDOG_SLEEP, DROP_CACHES, STREAM_POLL_CALLS, DARK_POLLS, WHEEL_TS_READ, PDR
+    from build import sha, run, fileoff, symbols, BLUEALSA, AAC_44K1, GRADIENT_LEAF, WM_PAINT_LEAF, QUEUE_LEAF, HELPER, HELPER_LIKE, BOOT, BOOT_HOOK, REMOTE, REMOTE_HOOK, LOG_HOOK, WHEEL_LOG_HOOK, S90PLAY, S11LOGO, LOGO_HOOK, ANIM_HOOK, LOGO_LIGHT, BLUEALSA2, BT_KEEPALIVE, BLUETOOTHD, BT_GRACE, RTC_WRITE, WIFI_LPS, HOOKS, LOCK_CLOCK_12H, WATCHDOG, WATCHDOG_SLEEP, DROP_CACHES, STREAM_POLL_CALLS, DARK_POLLS, WHEEL_TS_READ, PDR
     from ipod import (ART_PLACEHOLDERS, sized_art, AUDIT, TOOLBAR_SWITCHES, BOTTOM, CONFIRM, VOLUME, BIGCOVER, BC_ART, BC_TITLE_PAD, QUICK_SETTINGS, QS_TOP, QS_LABEL_GAP, QS_LABEL_H,
                       QS_LABEL_W, QS_ROW_GAP, QS_PITCH, QS_BAR, QS_TOUCH, QS_EDGE, QS_SUN, HOME_LABEL_END, HOME_LIST_W, HOME_TEXT_X, HOME_TOP, PITCH, ARTIST_PAGE, HOME_OURS, HOME_PAGE, HOME_ROWS, NAVBAR_ONLY, PLAYING_PAGE, SET_ROW, SET_ROWS, SET_TOP, UI_ASSETS,
                       NP_BAR, NP_TOUCH, NP_MARGIN, NP_POS_X, NP_TOP, STATUS_BAR, STATUS_HIDDEN, STATUS_LEFT, STATUS_MARGIN, STATUS_RIGHT, CLOCK_MIN, CLOCK_TEXT, corner_inset, corner_x,
@@ -545,7 +567,7 @@ def validate_assets(directory):
                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         assert absent.returncode != 0, 'release rootfs contains q2remote'
     assert read('rootfs.squashfs', S90PLAY) == expected_start
-    assert read('rootfs.squashfs', S11LOGO) == read('stock.squashfs', S11LOGO).replace(*LOGO_HOOK)  # the card's logo, if saved
+    assert read('rootfs.squashfs', S11LOGO) == read('stock.squashfs', S11LOGO).replace(*LOGO_HOOK).replace(*ANIM_HOOK)  # the card's boot animation or logo, if saved
     # Card apps without root (build.py APP_UID): q2mount, executable, from the mdev script and USB storage's end, and
     # wpa_supplicant's saves 600
     from build import SD_MOUNT, SD_MOUNT_HOOK, WIFI_CONNECT, WPA_HOOK, PASSWD, PASSWD_HOOK, GROUP, GROUP_HOOK, Q2MOUNT, Q2MOUNT_SH, CARD_MOUNT_FMT, CARD_MOUNT_LINE

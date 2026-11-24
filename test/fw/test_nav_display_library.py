@@ -320,9 +320,9 @@ STATE = {'THEME': 'theme', 'LIGHT': 'light', 'ACCENT': 'accent', 'ROUNDED': 'rou
 
 def appearance_titles(t):
     """Appearance's rows under theme t: Theme, t's options in its theme.xml's order, then the Home switches every
-    theme has."""
+    theme has, then Startup Screen (bootanim.c)."""
     return ['Theme'] + [o['label'] if o['setting'] == 'SETTING_OWN' else PAYLOAD[o['setting']][0] for o in t['opts']] + \
-        ['Hide Streaming', 'Hide Folder', 'Hide Apps', 'Hide Games', 'Hide App Store', 'Hide Hi-Res']
+        ['Hide Streaming', 'Hide Folder', 'Hide Apps', 'Hide Games', 'Hide App Store', 'Hide Hi-Res', 'Startup Screen']
 
 
 def stored_key(t, o):

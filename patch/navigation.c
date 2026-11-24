@@ -6463,6 +6463,7 @@ int ringnav_display(widget_t *win, void *ctx) {
         pod_rows(win, "scroll_view_display", POD_HIDE_STREAM, 2, home_icons);
         pod_rows(win, "scroll_view_display", POD_HIDE_APPS, 2, home_icons);
         pod_rows(win, "scroll_view_display", POD_HIDE_STORE, 2, home_icons);
+        startup_row(win, view); /* bootanim.c */
         return result;
     }
     wheel_row(list_row_into(view, "system_display", xfade_open, (void *)1));

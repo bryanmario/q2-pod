@@ -648,6 +648,12 @@ int told_once(const char *src, const char *seen, const char *tmp);
 /* side_seek.c: a dark hold of Previous or Next (ple_key's phases) */
 int side_seek(unsigned key, int phase);
 
+/* bootanim.c */
+void startup_row(void *win, void *view); /* Display > Appearance's Startup Screen */
+int photo_file(const char *name);        /* photos.c: a .jpg, .jpeg or .png, not hidden */
+/* system.c: w << 16 | h of a JPEG stock display_logo draws, else 0 */
+unsigned jpeg_size(const unsigned char *b, unsigned n);
+
 /* usb_charge.c: wrappers for charging, configuration loading and USB gadget dispatch. */
 int ringnav_usb_charge(int on), usb_charge_held(void), usb_charge_wanted(void);
 void usb_charge_row(widget_t *win, widget_t *view); /* Power's USB DAC Charging */

@@ -8,6 +8,7 @@
   - Playback: with a shuffle and **Repeat Song**, **Next** at the end of a round starts the next round. When that round began with the song playing, every **Next** restarted that song until you changed an option; now it plays once more and the next **Next** moves on.
   - Cover Flow: under Classic and Classic Modern, a turned-over album or playlist shows its songs' total time after the artist or the song count, when **Scan Song Durations** is on and every song has a measured length.
   - Appearance: a **Hide Hi-Res** switch, after **Hide App Store**, takes the **Hi-Res** row out of the Library.
+  - Startup Screen: **Display → Appearance → Startup Screen** shows your own image or animation at power-on. Pick a JPEG or PNG (up to 720x540) or a GIF (up to 480x360, 5 seconds, 30 frames per second) from the card; the Q2 makes it once to fill the screen, then offers to restart. **Default** goes back to the built-in screen ([boot.md](boot.md#startup-screen)).
   - Languages: with a Chinese language pack, the keyboard starts in pinyin, and one key goes round pinyin, lower case and capitals (**abc**, **ABC**, **中**). An app's sign-in fields keep the letters.
   - Cover Flow: turning the covers takes less of the processor. Each cover's picture is now held in the order the screen draws it, column by column, so drawing one reads memory in a straight run.
   - App Store: removing an app no longer deletes a file off the card that the app's list of files names. The list is kept on the card, where any app can write to it.

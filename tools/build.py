@@ -255,6 +255,17 @@ HELPER_LIBS = ['lib/libc-2.28.so', 'lib/libpthread-2.28.so', 'usr/lib/libasound.
 BOOT = 'usr/bin/q2boot'
 REMOTE = 'usr/bin/q2remote'
 S90PLAY = 'etc/init.d/S90play'
+# Startup Screen (docs/boot.md#startup-screen): Settings makes a picked GIF (bootanim.c: at most 480x360,
+# 30 fps, ANIM_MAX_S, 2.5 MB) once into ANIM, or a picked image into STARTUP_IMAGE, already filling the screen
+# and turned as the framebuffer is, so the splash plays it through stock ffmpeg (or display_logo) with nothing
+# left to scale (LOGO_HOOK). Only one of the two is ever there. ANIM_FLAG is there from before the splash's
+# background job starts until the GIF's end, and S90play waits for it to go (ANIM_HOOK, BOOT_HOOK), so nothing
+# takes the screen mid-way. A GIF ffmpeg can't play shows the splash as if there were none.
+ANIM, ANIM_FLAG, ANIM_MAX_S = '/mnt/data/startup.gif', '/tmp/q2-bootanim', 5  # startup.c ANIM_CS
+STARTUP_IMAGE = '/mnt/data/startup.jpg'  # startup.c IMAGE_DST: shown before a card boot logo
+ANIM_VF = 'format=bgra'
+ANIM_HOOK = (b'        jpeg_display &\n',
+             b'        [ -f %s ] && : >%s\n        jpeg_display &\n' % (ANIM.encode(), ANIM_FLAG.encode()))
 ROCKBOX_FLAG = '/tmp/q2pod-rockbox'
 # Rockbox can't use Wi-Fi and the radio costs battery, so rockbox() below stops it. Nothing is saved or restored
 # here: demo, which follows every Rockbox exit, restarts Wi-Fi from WIFI in config.ini, which wifi_switch writes on
@@ -310,6 +321,12 @@ BOOT_HOOK = (b'    /release/bin/demo &\n', f'''    (
             rm -f /tmp/rtk_init_success /tmp/bt_startup
             /usr/bin/cmd_gpio set_func PD20 output0
         }}
+        # the boot animation plays to its end before anything else takes the screen (ANIM_HOOK; S11logo removes the flag)
+        i=0; while [ -e {ANIM_FLAG} ] && [ $i -lt {ANIM_MAX_S * 10 + 30} ]; do usleep 100000; i=$((i+1)); done
+        # still playing (a slow Q2): the player takes the screen now, so the animation's ffmpeg (its pid is in the
+        # flag, LOGO_HOOK) stops; the flag goes first, so the splash hook doesn't draw the logo over the player as it
+        # would for a GIF ffmpeg can't play
+        [ -e {ANIM_FLAG} ] && {{ p=$(cat {ANIM_FLAG} 2>/dev/null); rm -f {ANIM_FLAG}; [ -n "$p" ] && kill -9 $p 2>/dev/null; }}
         if [ "$(cat /mnt/data/boot-target 2>/dev/null)" != q2pod ] && ! /usr/bin/q2boot; then
             for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
                 [ -e /tmp/mmc_add ] && break
@@ -1367,8 +1384,11 @@ TIMEZONES = (
 # One missing or out of range is config_init's: index 22.
 LOGO_ZONES = ' '.join(f"{i}) z='{zone}';;" for i, (_, zone) in enumerate(TIMEZONES)) + f" *) z='{TIMEZONES[22][1]}';;"
 LOGO_HOOK = (b'   \tdisplay_logo /release/assets/default/raw/images/xx/logo.jpg\n',
-             b'   \tl=/mnt/data/boot-logo.jpg; [ -f $l ] || { l=/%s; light=0; grep -qx LIGHT=1 /mnt/data/config.ini 2>/dev/null && light=1; grep -qx LIGHT=2 /mnt/data/config.ini 2>/dev/null && { case $(sed -n s/^TIMEZONE=//p /mnt/data/config.ini) in %s esac; case $(TZ=$z date +%%H) in 0[7-9]|1[0-8]) light=1;; esac; }; [ $light = 1 ] && [ -f /%s ] && l=/%s; }; display_logo $l\n'
-             % (LOGO.encode(), LOGO_ZONES.encode(), LOGO_LIGHT.encode(), LOGO_LIGHT.encode()))
+             b'   \ta=%s; f=%s; { [ -f $a ] && { /usr/bin/ffmpeg -nostdin -v quiet -re -i $a -t %d -vf "%s" -f fbdev /dev/fb0 & echo $! >$f; wait $!; }; } || { [ -f $a ] && [ ! -e $f ]; } || { '
+             % (ANIM.encode(), ANIM_FLAG.encode(), ANIM_MAX_S, ANIM_VF.encode()) +
+             b'l=%s; [ -f $l ] || l=/mnt/data/boot-logo.jpg; [ -f $l ] || { l=/%s; light=0; grep -qx LIGHT=1 /mnt/data/config.ini 2>/dev/null && light=1; grep -qx LIGHT=2 /mnt/data/config.ini 2>/dev/null && { case $(sed -n s/^TIMEZONE=//p /mnt/data/config.ini) in %s esac; case $(TZ=$z date +%%H) in 0[7-9]|1[0-8]) light=1;; esac; }; [ $light = 1 ] && [ -f /%s ] && l=/%s; }; display_logo $l; }; rm -f %s\n'
+             % (STARTUP_IMAGE.encode(), LOGO.encode(), LOGO_ZONES.encode(), LOGO_LIGHT.encode(), LOGO_LIGHT.encode(),
+                ANIM_FLAG.encode()))
 def timezone_offset(label):
     sign, h, m = need(re.match(r'GMT([+-])(\d+)(?::(\d+))?', label), f'Unexpected time zone {label}').groups()
     return (1 if sign == '+' else -1) * (int(h) * 60 + int(m or 0))
@@ -1828,7 +1848,7 @@ CONTEXT_DATA = {'bt_showcoding': 4, 'g_memory_info': 3476, 'g_folder_path': 1024
 # Windows the payload creates at runtime (window_create), so no rootfs asset names them.
 PAYLOAD_WINDOWS = {'playlistedit_page', 'chapters_page', 'coverflow_page', 'photos_page', 'games_page', 'cardapps_page', 'mostplayed_page', 'shuffle_page', 'upnext_page', 'ratings_page', 'era_page', 'era_albums_page', 'rated_page', 'longsongs_page', 'spotify_page',
                    'spotbrowse_page', 'radio_page', 'radionp_page', 'streamconf_page', 'tidal_downloads', 'apps_page',
-                   'addon_page', 'app_songs', 'qrcode_page', 'battery_page'}
+                   'addon_page', 'app_songs', 'qrcode_page', 'battery_page', 'startup_page'}
 ICONS = [f'menu_{c}{s}.png' for c in ('coverflow', 'rockbox') for s in ('', 'down')]
 # The stock EQ preset page and the images only it and the stock equalizer page show: the PEQ
 # editor clears that page's widgets on init and never binds the preset button, so none can load.
@@ -1863,7 +1883,7 @@ FLAGS = ['--target=mipsel-linux-gnu','-march=mips32r2','-mabi=32','-mfp64',
          '-Wshadow','-Wimplicit-int-conversion','-Wconditional-uninitialized','-Wmissing-variable-declarations',
          '-Wvla','-Wundef']
 # navigation.c and the files split out of it (patch/navigation.h), each its own object, linked in this order.
-NAVIGATION = ['navigation.c', 'theme_engine.c', 'playlists.c', 'classic_pages.c', 'home.c', 'np_bar.c', 'volume.c', 'smart_wifi.c', 'system.c', 'usb_charge.c', 'tags.c', 'scrobble_ui.c', 'library_lists.c', 'durations.c', 'script.c', 'coverflow_position.c', 'ratings.c', 'scan_folders.c', 'folder_delete.c', 'battery.c', 'np_lyrics.c', 'quick_settings.c', 'flat.c', 'clock.c', 'queue_menu.c', 'np_marks.c', 'rotate.c', 'netservice.c', 'addon_bar.c', 'side_seek.c', 'language.c', 'bidi_text.c', 'card_theme.c', 'card_rules.c', 'sleep_row.c']
+NAVIGATION = ['navigation.c', 'theme_engine.c', 'playlists.c', 'classic_pages.c', 'home.c', 'np_bar.c', 'volume.c', 'smart_wifi.c', 'system.c', 'bootanim.c', 'usb_charge.c', 'tags.c', 'scrobble_ui.c', 'library_lists.c', 'durations.c', 'script.c', 'coverflow_position.c', 'ratings.c', 'scan_folders.c', 'folder_delete.c', 'battery.c', 'np_lyrics.c', 'quick_settings.c', 'flat.c', 'clock.c', 'queue_menu.c', 'np_marks.c', 'rotate.c', 'netservice.c', 'addon_bar.c', 'side_seek.c', 'language.c', 'bidi_text.c', 'card_theme.c', 'card_rules.c', 'sleep_row.c']
 
 def compile_payload(out):  # pragma: no mutate block
     """Compile and link the payload."""
@@ -2390,8 +2410,8 @@ def build(zip_path, out, logo, dev=False, repo=REPO, stock_flac=False):  # pragm
     (out/'S90play').write_bytes(s90play.replace(*REMOTE_HOOK).replace(*LOG_HOOK).replace(*WHEEL_LOG_HOOK) if dev else s90play)
     (out/'config.ini').write_bytes(default_config(cat(DEFAULT_CONFIG)))
     s11logo = cat(S11LOGO)
-    check(s11logo.count(LOGO_HOOK[0]) == 1, 'Unexpected S11logo_display_shell')
-    (out/'S11logo').write_bytes(s11logo.replace(*LOGO_HOOK))
+    check(s11logo.count(LOGO_HOOK[0]) == 1 and s11logo.count(ANIM_HOOK[0]) == 1, 'Unexpected S11logo_display_shell')
+    (out/'S11logo').write_bytes(s11logo.replace(*LOGO_HOOK).replace(*ANIM_HOOK))
     bluealsa2 = cat(BLUEALSA2)
     check(bluealsa2.count(BT_KEEPALIVE[0]) == 1, 'Unexpected bluealsa2')
     (out/'bluealsa2').write_bytes(bluealsa2.replace(*BT_KEEPALIVE))

@@ -63,6 +63,20 @@ Bluetooth survives the hand-over: demo starts `rtk_hciattach`, `bluetoothd` and 
 
 After Rockbox exits, the hook stops `bluetoothd`, `bluealsa` and `rtk_hciattach`, removes `/tmp/rtk_init_success` and `/tmp/bt_startup`, and drives `PD20` to `output0` before demo starts. Stock `closeBluetooth` supplies the daemon, Realtek readiness and GPIO steps: demo's `openBluetooth` drives the same pin high and starts the helpers again. The external BlueALSA also creates `/tmp/bt_startup` when it acquires `shanling.bluealsa`; demo normally consumes it, but a handover during asynchronous startup can leave it behind. Clearing both markers prevents the next startup from accepting the previous helpers' readiness. The cleanup runs inside `rockbox()` for both entry paths, after recording Rockbox's exit status. It leaves the shared radio module loaded and preserves the saved Bluetooth preference and pairings. It adds no delay, as stock's Off has none.
 
+## Startup Screen
+
+**Display → Appearance → Startup Screen** sets what the screen shows at power-on, all on the Q2:
+
+- **Default**: the firmware's splash, or the card's boot logo ([Custom boot logo](#custom-boot-logo)).
+- **Image**: a JPEG or PNG from the card, at most 720x540 pixels and 2.5 MB.
+- **Animation**: a GIF from the card, at most 480x360 pixels, 5 seconds, 30 frames per second and 2.5 MB.
+
+Image and Animation list the card's files of that kind, in its root and two levels of folders (at most 256). A picked file over a limit is refused with the limit it breaks, before anything is made. Otherwise, once you agree, playback pauses and stock ffmpeg makes it once (`bootanim.c`), at the lowest priority, into `/mnt/data/startup.jpg` or `/mnt/data/startup.gif`: filling the 375x320 screen (scaled until it covers it, the middle kept, no black bars), turned as the framebuffer is, a GIF in colours of its own (palettegen, then paletteuse). The page shows the progress, then offers a restart. The made file must read back as a GIF, or as the 320x375 baseline JPEG `display_logo` draws, and is at most 2 MB; it is saved only when 6 MB stay free on `/mnt/data`. Only one is ever kept: making one removes the other, and **Default** removes both. The card file is not needed afterwards.
+
+At power-on the splash hook (`tools/build.py` `LOGO_HOOK`) plays `startup.gif` through stock ffmpeg, which has only to convert its colours (a 3.5 s GIF costs about 350 million instructions in all, counted in the Q2 Emulator's measuring mode; fitting each frame there instead cost about ten times that). S90play waits for it to end, at most `ANIM_MAX_S` plus 3 s, and stops it if it is still playing then, so it never draws over the player. A GIF ffmpeg can't play shows the splash. Without an animation, `startup.jpg` is drawn by `display_logo`, before the card's boot logo.
+
+For the sharpest result, export at the screen's own size: 375x320 pixels.
+
 ## Custom boot logo
 
 ### From the card

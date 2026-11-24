@@ -465,7 +465,7 @@ int ringnav_standby_umount(const char *cmd) {
 static const char logo_refused[] = N_("Boot logo must be a 320x375 JPEG");
 /* tools/build.py's jpeg_size: w << 16 | h of a baseline 8-bit three-component JPEG, the only kind
  * stock display_logo draws right; 0 for anything else. */
-static unsigned jpeg_size(const unsigned char *b, unsigned n) {
+unsigned jpeg_size(const unsigned char *b, unsigned n) {
     unsigned i = 2, m, size;
     if (n < 2 || b[0] != 0xff || b[1] != 0xd8) return 0;
     while (i < n) {
